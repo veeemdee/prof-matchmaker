@@ -8,11 +8,11 @@ PREFERENCES = [[1, 3, 7, 9],
                [0, 4, 5, 7],
                [3, 5, 8, 9],
                [0, 2, 4, 6],
-               [1, 3, 5, 7, 8],
+               [1, 3, 5, 7],
                [1, 2, 4, 6],
                [3, 5, 8, 9],
                [0, 1, 4, 8],
-               [2, 4, 6, 7, 9],
+               [2, 6, 7, 9],
                [0, 2, 6, 8]]
 
 def createChromosome():
@@ -95,6 +95,16 @@ def crossover(chromosome1, chromosome2):
     newChromosome2 = chromosome2[:crosspoint]+chromosome1[crosspoint:]
     return newChromosome1, newChromosome2
 
+def crossoverPopulation(population, crossoverCount):
+    popSize = len(population)
+    crossoverOrder = lotterySystem(popSize, "crossover", crossoverCount)
+    myOffsprings = []
+    for count in range(crossoverCount):
+        chromosome1 = population[crossoverOrder[count*2]]
+        chromosome2 = population[crossoverOrder[count*2+1]]
+        myOffsprings.extend(list(crossover(chromosome1,chromosome2)))
+    return myOffsprings
+
 def mutation(chromosome):
     def chromoSwap(chromosome, sessionIndex, profIndexA, profIndexB):
         if profIndexA > profIndexB:
@@ -105,24 +115,106 @@ def mutation(chromosome):
         newSession = (session[:profIndexA] + [session[profIndexB]] +
                       session[profIndexA+1:profIndexB] +
                       [session[profIndexA]] + session[profIndexB+1:])
-        newChromosome = (chromosome[:sessionIndex] + newSession +
+        newChromosome = (chromosome[:sessionIndex] + [newSession] +
                          chromosome[sessionIndex + 1:])
         return newChromosome
-        
+
     randomSessionIndex = random.randint(0, NUM_OF_SESSION-1)
     randomProfIndexA = random.randint(0, NUM_OF_PROF-1)
-    print("A",randomProfIndexA)
     randomProfIndexB = randomProfIndexA
     while (randomProfIndexA // 2) == (randomProfIndexB // 2):
-        print("B",randomProfIndexB)
-        randomProfB = random.randint(0, NUM_OF_PROF-1)
+        randomProfIndexB = random.randint(0, NUM_OF_PROF-1)
     return chromoSwap(chromosome, randomSessionIndex, randomProfIndexA, randomProfIndexB)
-    
+
+def mutationPopulation(population, mutationCount):
+    popSize = len(population)
+    mutationOrder = lotterySystem(popSize, 'mutation', mutationCount)
+    myOffsprings = []
+    for count in range(mutationCount):
+        myChromosome = population[mutationOrder[count]]
+        myOffsprings.append(mutation(myChromosome))
+    return myOffsprings
+
 def selection(chromosome):
     return chromosome
 
-def test():
-    aChromo = createChromosome()
-    print(aChromo)
-    newChromo = mutation(aChromo)
-    print(newChromo)
+def selectionPopulation(population, selectionCount):
+    popSize = len(population)
+    selectionOrder = lotterySystem(popSize, 'selection', selectionCount)
+    myOffsprings = []
+    for count in range(selectionCount):
+        myChromosome = population[selectionOrder[count]]
+        myOffsprings.append(selection(myChromosome))
+    return myOffsprings
+
+def newBlood():
+    return createChromosome()
+
+def newBloodPopulation(newBloodCount):
+    return generatePopulation(newBloodCount)    
+
+
+
+def findMatching(popSize, selectionCount, mutationCount,
+                 newBloodCount, crossoverCount):
+    currentPopulation = generatePopulation(popSize)
+    currentPopulation = sortPopulation(currentPopulation)
+    bestChromosome = currentPopulation[0]
+    bestScore = evaluateChromosome(bestChromosome)
+    currentGeneration = 0
+    bestGeneration = currentGeneration
+    while bestScore > 0:
+        currentGeneration += 1
+        newPopulation = []
+        newPopulation.extend(selectionPopulation(currentPopulation,selectionCount))
+        newPopulation.extend(mutationPopulation(currentPopulation,mutationCount))
+        newPopulation.extend(newBloodPopulation(newBloodCount))
+        newPopulation.extend(crossoverPopulation(currentPopulation,crossoverCount))
+
+        newPopulation = sortPopulation(newPopulation)
+        newBestScore = evaluateChromosome(newPopulation[0])
+        if newBestScore < bestScore:
+            bestChromosome = newPopulation[0]
+            bestScore = newBestScore
+            bestGeneration = currentGeneration
+            print("Best Chromosome is",bestChromosome,
+                  "with the score of",bestScore,
+                  "found at generation",bestGeneration)
+        currentPopulation = newPopulation
+    return bestChromosome, bestScore, bestGeneration
+
+def parseChromosome(chromosome):
+    result = []
+    for profIndex in range(NUM_OF_PROF):
+        result.append([])
+    for session in chromosome:
+        for profIndex in range(0, NUM_OF_PROF, 2):
+            profA = session[profIndex]
+            profB = session[profIndex+1]
+            result[profA].append(profB)
+            result[profB].append(profA)
+    return result
+
+def generateTestCase(numOfProf):
+    preferenceMatrix = []
+    while True:
+        for index in range(numOfProf):
+            preferenceMatrix.append([])
+        for prof in range(NUM_OF_PROF):
+            pickCount = NUM_OF_SESSION - len(preferenceMatrix[prof])
+            if pickCount > 0:
+                if pickCount > NUM_OF_PROF - prof - 1:
+                    break
+                else:
+                    profToPick = random.sample(range(prof+1,NUM_OF_PROF),pickCount)
+                    preferenceMatrix[prof].extend(profToPick)
+                    for pickedProf in profToPick:
+                        preferenceMatrix[pickedProf].append(prof)
+        return preferenceMatrix
+
+def testTestGenerator(numOfProf,runCount):
+    failCount = 0
+    for index in range(runCount):
+        if generateTestCase(numOfProf) == -1:
+            failCount+=1
+    return failCount, runCount
